@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Input } from '@/components/ui/Input';
 import { PlusCircle, Edit, Trash2, Search, Check, Play, Clock, FileDown, RefreshCcw, Banknote, HardHat, CalendarCheck, XCircle, Printer, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Comanda, OrderStatus } from '@/lib/types';
-import { formatDate, formatCurrency, exportComenziToExcel, generateOrderWordDocument } from '@/lib/utils';
+import { formatDate, formatCurrency, exportAllComenziToZip, generateOrderWordDocument } from '@/lib/utils';
 import ConfirmDeleteModal from '@/components/modals/ConfirmDeleteModal';
 import ComandaModal from '@/components/modals/ComandaModal';
 import FinalizeazaComandaModal from '@/components/modals/FinalizeazaComandaModal';
@@ -163,13 +163,13 @@ const Comenzi: React.FC = () => {
         }
     };
 
-    const handleExport = (startDate: Date, endDate: Date) => {
+    const handleExport = async (startDate: Date, endDate: Date) => {
         try {
-            exportComenziToExcel(comenzi, doctori, produse, startDate, endDate);
-            toast.success("Exportul a fost inițiat. Verificați descărcările.");
-        } catch (error) {
+            await exportAllComenziToZip(comenzi, doctori, produse, startDate, endDate);
+            toast.success("Arhiva ZIP a fost descărcată cu succes.");
+        } catch (error: any) {
             console.error("Export failed:", error);
-            toast.error("Exportul a eșuat.");
+            toast.error(error?.message || "Exportul a eșuat.");
         }
     };
 
@@ -348,7 +348,7 @@ const Comenzi: React.FC = () => {
                                     variant={currentPage === page ? 'default' : 'outline'}
                                     size="sm"
                                     onClick={() => setCurrentPage(page)}
-                                    className="min-w-[36px]"
+                                    className="min-w-[36px] text-white"
                                 >
                                     {page}
                                 </Button>
@@ -369,9 +369,9 @@ const Comenzi: React.FC = () => {
             <ComandaModal isOpen={isComandaModalOpen} onClose={() => setComandaModalOpen(false)} onSave={handleSaveComanda} comanda={selectedComanda} />
             <FinalizeazaComandaModal isOpen={isFinalizeModalOpen} onClose={() => setFinalizeModalOpen(false)} onConfirm={handleProceedToFinalize} />
             <ConfirmFinalizeModal isOpen={isConfirmFinalizeModalOpen} onClose={() => setConfirmFinalizeModalOpen(false)} onConfirm={handleFinalizeConfirm} data={dataForFinalization} />
+            <ExportExcelModal isOpen={isExportModalOpen} onClose={() => setExportModalOpen(false)} onExport={handleExport} />
             <ConfirmDeleteModal isOpen={isDeleteModalOpen} onClose={() => setDeleteModalOpen(false)} onConfirm={handleDeleteConfirm} title="Confirmă Ștergerea Comenzii" description="Ești sigur că vrei să ștergi această comandă?" />
             <ConfirmDeleteModal isOpen={isReopenModalOpen} onClose={() => setReopenModalOpen(false)} onConfirm={handleReopenConfirm} title="Confirmă Redeschiderea" description="Ești sigur că vrei să redeschizi această comandă? Statutul va fi schimbat înapoi la 'În progres'." confirmText="Da, redeschide" />
-            <ExportExcelModal isOpen={isExportModalOpen} onClose={() => setExportModalOpen(false)} onExport={handleExport} />
         </div>
     );
 };

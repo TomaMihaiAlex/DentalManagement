@@ -1,10 +1,11 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { format, isWithinInterval, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { ro } from 'date-fns/locale';
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx-js-style';
 import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from 'docx';
 import { saveAs } from 'file-saver';
+import JSZip from 'jszip';
 import { Comanda, Doctor, Produs, Pacient } from "./types";
 
 export function cn(...inputs: ClassValue[]) {
@@ -13,12 +14,302 @@ export function cn(...inputs: ClassValue[]) {
 
 export const formatDate = (date: Date | string | undefined) => {
     if (!date) return 'N/A';
+    if (typeof date === 'string') {
+        // Plain date without time: extract DD/MM/YYYY directly
+        const plainMatch = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (plainMatch) return `${plainMatch[3]}/${plainMatch[2]}/${plainMatch[1]}`;
+        // ISO timestamp: parse as Date to get local date (consistent with export filter)
+        if (/^\d{4}-\d{2}-\d{2}[T ]/.test(date)) {
+            const d = new Date(date);
+            if (!isNaN(d.getTime())) {
+                return format(d, 'dd/MM/yyyy', { locale: ro });
+            }
+        }
+        // Handle DD/MM/YYYY, DD.MM.YYYY, DD-MM-YYYY
+        const dmyMatch = date.match(/^(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{4})$/);
+        if (dmyMatch) return `${dmyMatch[1].padStart(2, '0')}/${dmyMatch[2].padStart(2, '0')}/${dmyMatch[3]}`;
+    }
     const dateObj = typeof date === 'string' ? new Date(date) : date;
     return format(dateObj, 'dd/MM/yyyy', { locale: ro });
 };
 
 export const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ro-RO', { style: 'currency', currency: 'RON' }).format(amount);
+};
+
+// Helper to build a styled worksheet for a doctor using the "Fisa Laborator" template.
+// Returns a XLSX workbook ready to be written.
+const buildDoctorWorkbook = (
+    doctor: Doctor,
+    comenziDoctor: Comanda[],
+    produse: Produs[]
+): XLSX.WorkBook => {
+    // Build one section per ORDER (not grouped by patient).
+    // Each order shows: patient name, products, order total.
+    const orderSections: { pacientName: string; products: { name: string; cantitate: number; pret: number }[] }[] = [];
+
+    comenziDoctor.forEach(comanda => {
+        const pacient = doctor.pacienti.find(p => p.id === comanda.id_pacient);
+        const pacientName = pacient?.nume || 'N/A';
+
+        const products: { name: string; cantitate: number; pret: number }[] = [];
+        if (comanda.produse.length === 0) {
+            console.warn('[Export] Comanda', comanda.id, '(pacient:', pacientName, ') - array produse gol (0 produse încărcate)');
+        }
+        comanda.produse.forEach(cp => {
+            const produs = produse.find(p => p.id === cp.id_produs);
+            if (produs) {
+                products.push({
+                    name: produs.nume,
+                    cantitate: cp.cantitate,
+                    pret: produs.pret,
+                });
+            } else {
+                console.warn('[Export] Comanda', comanda.id, '- produs cu id_produs', cp.id_produs, 'nu a fost găsit în lista de produse');
+            }
+        });
+
+        // Always include the order, even if no products resolved
+        orderSections.push({ pacientName, products });
+    });
+
+    // Build sheet data row by row
+    const sheetData: (string | number | null)[][] = [];
+    const merges: XLSX.Range[] = [];
+
+    // Row 0-1: Title "Fisa Laborator" (merged A1:D2)
+    sheetData.push(['Fisa Laborator', null, null, null]);
+    sheetData.push([null, null, null, null]);
+    merges.push({ s: { r: 0, c: 0 }, e: { r: 1, c: 3 } });
+
+    // Row 2: Doctor name (merged A3:D3)
+    sheetData.push([doctor.nume, null, null, null]);
+    merges.push({ s: { r: 2, c: 0 }, e: { r: 2, c: 3 } });
+
+    // Row 3: Empty
+    sheetData.push([null, null, null, null]);
+
+    // Row 4: Headers
+    sheetData.push(['PACIENT', 'PRODUS', 'BUCĂȚI', 'PREȚ']);
+
+    let currentRow = 5;
+    const orderTotalRows: number[] = [];
+
+    for (const section of orderSections) {
+        const startRow = currentRow;
+
+        // Sort products alphabetically
+        section.products.sort((a, b) => a.name.localeCompare(b.name, 'ro'));
+
+        if (section.products.length === 0) {
+            // Order with no products: show patient name with empty product/qty/price
+            sheetData.push([section.pacientName, '-', 0, 0]);
+            currentRow++;
+        } else {
+            section.products.forEach((product, idx) => {
+                sheetData.push([
+                    idx === 0 ? section.pacientName : null,
+                    product.name,
+                    product.cantitate,
+                    product.pret * product.cantitate,
+                ]);
+                currentRow++;
+            });
+
+            // Merge patient name cells vertically if more than one product
+            if (section.products.length > 1) {
+                merges.push({ s: { r: startRow, c: 0 }, e: { r: currentRow - 1, c: 0 } });
+            }
+        }
+
+        // Total per order row (A-C merged)
+        const orderTotal = section.products.reduce((sum, p) => sum + p.pret * p.cantitate, 0);
+        sheetData.push(['Total pacient', null, null, orderTotal]);
+        merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: 2 } });
+        orderTotalRows.push(currentRow);
+        currentRow++;
+    }
+
+    // Empty row before grand total
+    sheetData.push([null, null, null, null]);
+    currentRow++;
+
+    // Grand total row
+    const grandTotal = orderTotalRows.reduce((sum, row) => sum + (sheetData[row][3] as number), 0);
+    sheetData.push(['TOTAL', null, null, grandTotal]);
+    const grandTotalRow = currentRow;
+
+    // Create worksheet
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+    ws['!merges'] = merges;
+
+    // Column widths
+    ws['!cols'] = [
+        { wch: 25 }, // PACIENT
+        { wch: 30 }, // PRODUS
+        { wch: 12 }, // BUCĂȚI
+        { wch: 15 }, // PREȚ
+    ];
+
+    // Row heights for title
+    ws['!rows'] = [];
+    ws['!rows'][0] = { hpt: 22 };
+    ws['!rows'][1] = { hpt: 22 };
+
+    // --- STYLES ---
+    const border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
+
+    // Title: "Fisa Laborator" (A1)
+    const cellA1 = XLSX.utils.encode_cell({ r: 0, c: 0 });
+    ws[cellA1].s = {
+        font: { name: 'Calibri', sz: 16, bold: true },
+        alignment: { horizontal: 'center', vertical: 'center' },
+    };
+
+    // Doctor name (A3)
+    const cellA3 = XLSX.utils.encode_cell({ r: 2, c: 0 });
+    if (ws[cellA3]) {
+        ws[cellA3].s = {
+            font: { name: 'Calibri', sz: 12, bold: true },
+            alignment: { horizontal: 'center', vertical: 'center' },
+        };
+    }
+
+    // Header row (row 4)
+    for (let c = 0; c < 4; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r: 4, c });
+        if (ws[cellRef]) {
+            ws[cellRef].s = {
+                font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: "274E13" } },
+                fill: { fgColor: { rgb: "D9EAD3" } },
+                alignment: { horizontal: 'center', vertical: 'center' },
+                border,
+            };
+        }
+    }
+
+    // Data cells (patient products)
+    // Columns A (patient), B (product), C (quantity) = white background
+    // Column D (price) = green background #E8F5E9
+    const dataCellStyleWhite = {
+        fill: { fgColor: { rgb: "FFFFFF" } },
+        border,
+        alignment: { horizontal: 'center', vertical: 'center' },
+    };
+    const dataCellStyleGreen = {
+        fill: { fgColor: { rgb: "E8F5E9" } },
+        border,
+        alignment: { horizontal: 'center', vertical: 'center' },
+    };
+
+    for (let r = 5; r < sheetData.length; r++) {
+        if (orderTotalRows.includes(r) || r === grandTotalRow || sheetData[r].every(v => v === null)) continue;
+        for (let c = 0; c < 4; c++) {
+            const cellRef = XLSX.utils.encode_cell({ r, c });
+            if (ws[cellRef]) {
+                ws[cellRef].s = c < 3 ? dataCellStyleWhite : dataCellStyleGreen;
+            }
+        }
+    }
+
+    // Order total rows - background #fef5e7, D text blue
+    orderTotalRows.forEach(row => {
+        const labelRef = XLSX.utils.encode_cell({ r: row, c: 0 });
+        if (ws[labelRef]) {
+            ws[labelRef].s = {
+                fill: { fgColor: { rgb: "FEF5E7" } },
+                border,
+                alignment: { horizontal: 'center', vertical: 'center' },
+            };
+        }
+        // Ensure merged empty cells B and C also get background
+        for (let c = 1; c <= 2; c++) {
+            const ref = XLSX.utils.encode_cell({ r: row, c });
+            if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+            ws[ref].s = {
+                fill: { fgColor: { rgb: "FEF5E7" } },
+                border,
+            };
+        }
+        const valueRef = XLSX.utils.encode_cell({ r: row, c: 3 });
+        if (ws[valueRef]) {
+            ws[valueRef].s = {
+                fill: { fgColor: { rgb: "FEF5E7" } },
+                font: { color: { rgb: "0000FF" } },
+                border,
+                alignment: { horizontal: 'center', vertical: 'center' },
+            };
+        }
+    });
+
+    // Grand total row - background #fff3cd, bold, A left-aligned
+    for (let c = 0; c < 4; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r: grandTotalRow, c });
+        if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' };
+        ws[cellRef].s = {
+            font: { bold: true },
+            fill: { fgColor: { rgb: "FFF3CD" } },
+            border,
+            alignment: { horizontal: c === 0 ? 'left' : 'center', vertical: 'center' },
+        };
+    }
+
+    const wb = XLSX.utils.book_new();
+    const safeSheetName = doctor.nume.replace(/[:\\/?*[\]]/g, '').substring(0, 31);
+    XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
+    return wb;
+};
+
+// Convert a Date object to a local YYYY-MM-DD string.
+const dateToLocalStr = (d: Date): string =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+// Extract a YYYY-MM-DD date string from various date formats.
+// Uses LOCAL timezone for ISO timestamps so the result matches the DatePicker dates.
+const extractDateStr = (dateStr: string): string | null => {
+    if (!dateStr) return null;
+    const trimmed = String(dateStr).trim();
+
+    // 1. Plain date without time: "2026-03-15" — use as-is (no timezone to convert)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        return trimmed;
+    }
+
+    // 2. ISO / Supabase timestamp: "2026-03-15T14:30:00Z", "2026-03-15 14:30:00+00:00", etc.
+    //    Parse via Date to get the LOCAL date (matching the user's timezone, same as DatePicker).
+    if (/^\d{4}-\d{2}-\d{2}[T ]/.test(trimmed)) {
+        const d = new Date(trimmed);
+        if (!isNaN(d.getTime())) {
+            return dateToLocalStr(d);
+        }
+        // Fallback: extract YYYY-MM-DD directly if Date parsing fails
+        const m = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    }
+
+    // 3. DD/MM/YYYY or DD.MM.YYYY or DD-MM-YYYY (Romanian / European formats)
+    const dmyMatch = trimmed.match(/^(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{4})$/);
+    if (dmyMatch) {
+        return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+    }
+
+    // 4. Last resort: parse with Date constructor (uses local timezone)
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+        return dateToLocalStr(d);
+    }
+
+    return null;
+};
+
+// Check if status represents a finalized order (handles diacritics / casing / Unicode forms)
+const isStatusFinalized = (status: string | undefined | null): boolean => {
+    if (!status) return false;
+    // Normalize to NFC first to handle decomposed Unicode characters (e.g., a + combining breve vs ă)
+    const nfc = status.normalize('NFC');
+    if (nfc === 'Finalizată') return true;
+    const stripped = nfc.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    return stripped === 'finalizata';
 };
 
 export const exportComenziToExcel = (
@@ -28,13 +319,48 @@ export const exportComenziToExcel = (
     startDate: Date,
     endDate: Date
 ) => {
-    // Filter only for 'Finalizată' orders within the selected date range based on 'data_finalizare'
+    const startStr = dateToLocalStr(startDate);
+    const endStr = dateToLocalStr(endDate);
+
+    console.debug('[Export] Date range:', startStr, '→', endStr);
+    console.debug('[Export] Total comenzi:', comenzi.length,
+        '| Finalizate:', comenzi.filter(c => isStatusFinalized(c.status)).length,
+        '| Cu data_finalizare:', comenzi.filter(c => !!c.data_finalizare).length);
+
+    // Log every finalized order for diagnostics
+    comenzi.filter(c => isStatusFinalized(c.status)).forEach(c => {
+        console.debug('[Export] Comanda finalizată', c.id,
+            '| status:', JSON.stringify(c.status),
+            '| data_finalizare:', JSON.stringify(c.data_finalizare),
+            '| data_start:', JSON.stringify(c.data_start),
+            '| termen_limita:', JSON.stringify(c.termen_limita));
+    });
+
     const filteredComenzi = comenzi.filter(c => {
-        if (c.status !== 'Finalizată' || !c.data_finalizare) {
+        if (!isStatusFinalized(c.status)) return false;
+
+        // Filter by data_finalizare: include orders whose completion date
+        // falls within the selected date range [startStr, endStr].
+        const finDateStr = c.data_finalizare ? extractDateStr(c.data_finalizare) : null;
+
+        if (!finDateStr) {
+            console.debug('[Export] Comanda', c.id, '- fără data_finalizare, exclusă');
             return false;
         }
-        const comandaDate = parseISO(c.data_finalizare);
-        return isWithinInterval(comandaDate, { start: startDate, end: endDate });
+
+        const inRange = finDateStr >= startStr && finDateStr <= endStr;
+        if (!inRange) {
+            console.debug('[Export] Comanda', c.id, '- data_finalizare', finDateStr, 'nu este în intervalul', startStr, '-', endStr);
+        } else {
+            console.debug('[Export] Comanda', c.id, '- INCLUSĂ, data_finalizare:', finDateStr);
+        }
+        return inRange;
+    });
+
+    console.debug('[Export] Comenzi filtrate:', filteredComenzi.length);
+    // Log product counts for each filtered order
+    filteredComenzi.forEach(c => {
+        console.debug('[Export] Comanda', c.id, '| produse:', c.produse.length, '| produse ids:', c.produse.map(p => p.id_produs));
     });
 
     const groupedByDoctor = filteredComenzi.reduce((acc, comanda) => {
@@ -46,120 +372,88 @@ export const exportComenziToExcel = (
         const doctor = doctori.find(d => d.id === Number(doctorId));
         if (!doctor) continue;
 
-        const comenziDoctor = groupedByDoctor[doctorId];
-        // Sort products alphabetically by name so exported columns are ordered
-        const sortedProduse = [...produse].sort((a, b) => a.nume.localeCompare(b.nume, 'ro'));
-
-        // Build a preliminary matrix of values so we can detect empty columns (columns that are all '-')
-        const preliminaryRows = comenziDoctor.map(comanda => {
-            const pacient = doctor.pacienti.find(p => p.id === comanda.id_pacient);
-            const row: (string | number)[] = [pacient?.nume || 'N/A'];
-            sortedProduse.forEach(produs => {
-                const comandaProdus = comanda.produse.find(cp => cp.id_produs === produs.id);
-                row.push(comandaProdus ? comandaProdus.cantitate : '-');
-            });
-            row.push(comanda.total);
-            return row;
-        });
-
-        // Determine which product columns have any non '-' value
-        const productCount = sortedProduse.length;
-        const productHasValue = new Array(productCount).fill(false);
-        preliminaryRows.forEach(row => {
-            for (let i = 0; i < productCount; i++) {
-                const cell = row[1 + i]; // offset 1 for PACIENT column
-                if (cell !== '-' && cell !== null && cell !== undefined && cell !== '') productHasValue[i] = true;
-            }
-        });
-
-        // Build headers including only products that have at least one non '-' value
-        const includedProducts = sortedProduse.filter((_, idx) => productHasValue[idx]);
-        const productNames = includedProducts.map(p => p.nume);
-        const headers = ['PACIENT', ...productNames.map(p => p.toUpperCase()), 'TOTAL'].map(h => h.toUpperCase());
-
-        // Build final sheet data by including only columns that passed the filter
-        const sheetData = preliminaryRows.map(row => {
-            const base = [row[0]] as (string | number)[];
-            // include only product columns that have values
-            for (let i = 0; i < productCount; i++) {
-                if (!productHasValue[i]) continue;
-                base.push(row[1 + i]);
-            }
-            base.push(row[row.length - 1]); // total
-            return base;
-        });
-
-        const totalSum = comenziDoctor.reduce((sum, c) => sum + c.total, 0);
-        const totalRow = ['TOTAL SUMĂ', ...Array(productNames.length).fill(''), totalSum];
-
-        const finalSheetData = [
-            [doctor.nume.toUpperCase()],
-            headers,
-            ...sheetData,
-            totalRow
-        ];
-
-        const ws = XLSX.utils.aoa_to_sheet(finalSheetData);
-
-        // --- STYLING ---
-        const borderStyle = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
-        const centerAlign = { alignment: { horizontal: 'center', vertical: 'center' } };
-        
-        const titleStyle = { font: { name: 'Calibri', sz: 16, bold: true }, ...centerAlign };
-        const headerStyle = { font: { name: 'Calibri', sz: 12, bold: true }, fill: { fgColor: { rgb: "E0E0E0" } }, border: borderStyle, ...centerAlign };
-        const totalLabelStyle = { font: { name: 'Calibri', sz: 12, bold: true }, border: borderStyle, ...centerAlign };
-        const totalValueStyle = { font: { name: 'Calibri', sz: 12, bold: true }, numFmt: '#,##0.00 "RON"', border: borderStyle, ...centerAlign };
-        const currencyStyle = { numFmt: '#,##0.00 "RON"', border: borderStyle, ...centerAlign };
-        const defaultCellStyle = { border: borderStyle, ...centerAlign };
-
-        // 1. Column Widths
-        const colWidths = headers.map((header, i) => {
-            const allValues = [header, ...finalSheetData.map(row => row[i])];
-            const maxLength = Math.max(...allValues.filter(v => v != null).map(v => v.toString().length));
-            return { wch: maxLength + 5 }; // +5 for padding
-        });
-        ws['!cols'] = colWidths;
-
-        // 2. Apply Styles
-        // Title
-        ws['A1'].s = titleStyle;
-        ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: headers.length - 1 } }];
-        ws['!rows'] = [{ hpt: 25 }]; // Title row height
-
-        // Headers
-        headers.forEach((_, c) => {
-            const cellRef = XLSX.utils.encode_cell({ r: 1, c });
-            if (ws[cellRef]) ws[cellRef].s = headerStyle;
-        });
-
-        // Data Rows
-        sheetData.forEach((row, r) => {
-            row.forEach((cellValue, c) => {
-                const cellRef = XLSX.utils.encode_cell({ r: 2 + r, c });
-                if (!ws[cellRef]) ws[cellRef] = { t: typeof cellValue === 'number' ? 'n' : 's', v: cellValue };
-                
-                if (c === headers.length - 1) { // Total column
-                    ws[cellRef].s = currencyStyle;
-                } else {
-                    ws[cellRef].s = defaultCellStyle;
-                }
-            });
-        });
-        
-        // Total Row
-        const totalRowNum = 2 + sheetData.length;
-        const totalLabelCellRef = XLSX.utils.encode_cell({ r: totalRowNum, c: 0 });
-        const totalValueCellRef = XLSX.utils.encode_cell({ r: totalRowNum, c: headers.length - 1 });
-        if (ws[totalLabelCellRef]) ws[totalLabelCellRef].s = totalLabelStyle;
-        if (ws[totalValueCellRef]) ws[totalValueCellRef].s = totalValueStyle;
-
-        const wb = XLSX.utils.book_new();
-        const safeSheetName = doctor.nume.replace(/[:\\/?*[\]]/g, '').substring(0, 31);
-        XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
-
+        const wb = buildDoctorWorkbook(doctor, groupedByDoctor[doctorId], produse);
         const filename = `${doctor.nume.replace(/\s/g, '_')}_${format(startDate, 'dd-MM-yyyy')}_${format(endDate, 'dd-MM-yyyy')}.xlsx`;
         XLSX.writeFile(wb, filename);
     }
+};
+
+export const exportAllComenziToZip = async (
+    comenzi: Comanda[],
+    doctori: Doctor[],
+    produse: Produs[],
+    startDate: Date,
+    endDate: Date
+) => {
+    const startStr = dateToLocalStr(startDate);
+    const endStr = dateToLocalStr(endDate);
+
+    console.debug('[ExportZip] Date range:', startStr, '→', endStr);
+    console.debug('[ExportZip] Total comenzi:', comenzi.length,
+        '| Finalizate:', comenzi.filter(c => isStatusFinalized(c.status)).length,
+        '| Cu data_finalizare:', comenzi.filter(c => !!c.data_finalizare).length);
+
+    // Log every finalized order for diagnostics
+    comenzi.filter(c => isStatusFinalized(c.status)).forEach(c => {
+        console.debug('[ExportZip] Comanda finalizată', c.id,
+            '| status:', JSON.stringify(c.status),
+            '| data_finalizare:', JSON.stringify(c.data_finalizare),
+            '| data_start:', JSON.stringify(c.data_start),
+            '| termen_limita:', JSON.stringify(c.termen_limita));
+    });
+
+    const filteredComenzi = comenzi.filter(c => {
+        if (!isStatusFinalized(c.status)) return false;
+
+        // Filter by data_finalizare: include orders whose completion date
+        // falls within the selected date range [startStr, endStr].
+        const finDateStr = c.data_finalizare ? extractDateStr(c.data_finalizare) : null;
+
+        if (!finDateStr) {
+            console.debug('[ExportZip] Comanda', c.id, '- fără data_finalizare, exclusă');
+            return false;
+        }
+
+        const inRange = finDateStr >= startStr && finDateStr <= endStr;
+        if (!inRange) {
+            console.debug('[ExportZip] Comanda', c.id, '- data_finalizare', finDateStr, 'nu este în intervalul', startStr, '-', endStr);
+        } else {
+            console.debug('[ExportZip] Comanda', c.id, '- INCLUSĂ, data_finalizare:', finDateStr);
+        }
+        return inRange;
+    });
+
+    console.debug('[ExportZip] Comenzi filtrate:', filteredComenzi.length);
+    // Log product counts for each filtered order
+    filteredComenzi.forEach(c => {
+        console.debug('[ExportZip] Comanda', c.id, '| produse:', c.produse.length, '| produse ids:', c.produse.map(p => p.id_produs));
+    });
+
+    if (filteredComenzi.length === 0) {
+        throw new Error('Nu există comenzi cu data de finalizare în perioada selectată.');
+    }
+
+    const groupedByDoctor = filteredComenzi.reduce((acc, comanda) => {
+        (acc[comanda.id_doctor] = acc[comanda.id_doctor] || []).push(comanda);
+        return acc;
+    }, {} as Record<number, Comanda[]>);
+
+    const zip = new JSZip();
+
+    for (const doctorId in groupedByDoctor) {
+        const doctor = doctori.find(d => d.id === Number(doctorId));
+        if (!doctor) continue;
+
+        const wb = buildDoctorWorkbook(doctor, groupedByDoctor[doctorId], produse);
+        const wbBinary = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const filename = `${doctor.nume.replace(/\s/g, '_')}.xlsx`;
+        zip.file(filename, wbBinary);
+    }
+
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const startFmt = format(startDate, 'dd-MM-yyyy');
+    const endFmt = format(endDate, 'dd-MM-yyyy');
+    saveAs(zipBlob, `Export_Comenzi_${startFmt}_${endFmt}.zip`);
 };
 
 export const generateOrderWordDocument = async (
