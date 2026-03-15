@@ -158,11 +158,19 @@ const buildDoctorWorkbook = (
 
     // --- STYLES ---
 
+    const grayBorder = {
+        top: { style: 'thin', color: { rgb: "808080" } },
+        bottom: { style: 'thin', color: { rgb: "808080" } },
+        left: { style: 'thin', color: { rgb: "808080" } },
+        right: { style: 'thin', color: { rgb: "808080" } },
+    };
+
     // Title: "Fisa Laborator" (A1)
     const cellA1 = XLSX.utils.encode_cell({ r: 0, c: 0 });
     ws[cellA1].s = {
         font: { name: 'Calibri', sz: 16, bold: true },
         alignment: { horizontal: 'center', vertical: 'center' },
+        border: grayBorder,
     };
 
     // Doctor name (A3)
@@ -172,6 +180,7 @@ const buildDoctorWorkbook = (
             font: { name: 'Calibri', sz: 12, bold: true },
             fill: { fgColor: { rgb: "D3D3D3" } },
             alignment: { horizontal: 'center', vertical: 'center' },
+            border: grayBorder,
         };
     }
 
@@ -183,6 +192,7 @@ const buildDoctorWorkbook = (
                 font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: "274E13" } },
                 fill: { fgColor: { rgb: "D9EAD3" } },
                 alignment: { horizontal: 'center', vertical: 'center' },
+                border: grayBorder,
             };
         }
     }
@@ -193,11 +203,13 @@ const buildDoctorWorkbook = (
     const dataCellStyleWhite = {
         fill: { fgColor: { rgb: "FFFFFF" } },
         alignment: { horizontal: 'center', vertical: 'center' },
+        border: grayBorder,
     };
     const dataCellStyleGreen = {
         fill: { fgColor: { rgb: "E8F5E9" } },
         alignment: { horizontal: 'center', vertical: 'center' },
         numFmt: '0.00',
+        border: grayBorder,
     };
 
     for (let r = 5; r < sheetData.length; r++) {
@@ -218,6 +230,7 @@ const buildDoctorWorkbook = (
                 font: { bold: true },
                 fill: { fgColor: { rgb: "FEF5E7" } },
                 alignment: { horizontal: 'center', vertical: 'center' },
+                border: grayBorder,
             };
         }
         // Ensure merged empty cells B and C also get background
@@ -226,6 +239,7 @@ const buildDoctorWorkbook = (
             if (!ws[ref]) ws[ref] = { t: 's', v: '' };
             ws[ref].s = {
                 fill: { fgColor: { rgb: "FEF5E7" } },
+                border: grayBorder,
             };
         }
         const valueRef = XLSX.utils.encode_cell({ r: row, c: 3 });
@@ -235,6 +249,7 @@ const buildDoctorWorkbook = (
                 font: { bold: true, color: { rgb: "0000FF" } },
                 alignment: { horizontal: 'center', vertical: 'center' },
                 numFmt: '0.00',
+                border: grayBorder,
             };
         }
     });
@@ -247,6 +262,7 @@ const buildDoctorWorkbook = (
             font: { bold: true },
             fill: { fgColor: { rgb: "FFF3CD" } },
             alignment: { horizontal: c === 0 ? 'left' : 'center', vertical: 'center' },
+            border: grayBorder,
             ...(c === 3 ? { numFmt: '0.00' } : {}),
         };
     }
