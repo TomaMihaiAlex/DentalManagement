@@ -61,8 +61,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   // On mount, if Supabase client is configured, try to load all data from Supabase
   React.useEffect(() => {
     if (!supabase) return;
-    const enableRealtime = (import.meta as any).env?.VITE_ENABLE_REALTIME;
-    if (enableRealtime === 'false') return;
 
     (async () => {
       try {
@@ -145,6 +143,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   // Realtime subscriptions: when supabase configured, subscribe to DB changes and keep local state in sync
   React.useEffect(() => {
     if (!supabase) return;
+
+    // Allow disabling realtime subscriptions via environment variable
+    const enableRealtime = (import.meta as any).env?.VITE_ENABLE_REALTIME;
+    if (enableRealtime === 'false') return;
 
     const tables = ['doctori', 'pacienti', 'produse', 'tehnicieni', 'comenzi', 'comanda_produse'];
     const channels: any[] = [];
