@@ -83,7 +83,7 @@ const buildDoctorWorkbook = (
     merges.push({ s: { r: 0, c: 0 }, e: { r: 1, c: 3 } });
 
     // Row 2: Doctor name (merged A3:D3)
-    sheetData.push([doctor.nume, null, null, null]);
+    sheetData.push([`Dr. ${doctor.nume}`, null, null, null]);
     merges.push({ s: { r: 2, c: 0 }, e: { r: 2, c: 3 } });
 
     // Row 3: Empty
@@ -157,7 +157,6 @@ const buildDoctorWorkbook = (
     ws['!rows'][1] = { hpt: 22 };
 
     // --- STYLES ---
-    const border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
 
     // Title: "Fisa Laborator" (A1)
     const cellA1 = XLSX.utils.encode_cell({ r: 0, c: 0 });
@@ -171,6 +170,7 @@ const buildDoctorWorkbook = (
     if (ws[cellA3]) {
         ws[cellA3].s = {
             font: { name: 'Calibri', sz: 12, bold: true },
+            fill: { fgColor: { rgb: "D3D3D3" } },
             alignment: { horizontal: 'center', vertical: 'center' },
         };
     }
@@ -183,7 +183,6 @@ const buildDoctorWorkbook = (
                 font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: "274E13" } },
                 fill: { fgColor: { rgb: "D9EAD3" } },
                 alignment: { horizontal: 'center', vertical: 'center' },
-                border,
             };
         }
     }
@@ -193,13 +192,12 @@ const buildDoctorWorkbook = (
     // Column D (price) = green background #E8F5E9
     const dataCellStyleWhite = {
         fill: { fgColor: { rgb: "FFFFFF" } },
-        border,
         alignment: { horizontal: 'center', vertical: 'center' },
     };
     const dataCellStyleGreen = {
         fill: { fgColor: { rgb: "E8F5E9" } },
-        border,
         alignment: { horizontal: 'center', vertical: 'center' },
+        numFmt: '0.00',
     };
 
     for (let r = 5; r < sheetData.length; r++) {
@@ -212,13 +210,13 @@ const buildDoctorWorkbook = (
         }
     }
 
-    // Order total rows - background #fef5e7, D text blue
+    // Order total rows - background #fef5e7, D text blue, label bold
     orderTotalRows.forEach(row => {
         const labelRef = XLSX.utils.encode_cell({ r: row, c: 0 });
         if (ws[labelRef]) {
             ws[labelRef].s = {
+                font: { bold: true },
                 fill: { fgColor: { rgb: "FEF5E7" } },
-                border,
                 alignment: { horizontal: 'center', vertical: 'center' },
             };
         }
@@ -228,16 +226,15 @@ const buildDoctorWorkbook = (
             if (!ws[ref]) ws[ref] = { t: 's', v: '' };
             ws[ref].s = {
                 fill: { fgColor: { rgb: "FEF5E7" } },
-                border,
             };
         }
         const valueRef = XLSX.utils.encode_cell({ r: row, c: 3 });
         if (ws[valueRef]) {
             ws[valueRef].s = {
                 fill: { fgColor: { rgb: "FEF5E7" } },
-                font: { color: { rgb: "0000FF" } },
-                border,
+                font: { bold: true, color: { rgb: "0000FF" } },
                 alignment: { horizontal: 'center', vertical: 'center' },
+                numFmt: '0.00',
             };
         }
     });
@@ -249,8 +246,8 @@ const buildDoctorWorkbook = (
         ws[cellRef].s = {
             font: { bold: true },
             fill: { fgColor: { rgb: "FFF3CD" } },
-            border,
             alignment: { horizontal: c === 0 ? 'left' : 'center', vertical: 'center' },
+            ...(c === 3 ? { numFmt: '0.00' } : {}),
         };
     }
 
