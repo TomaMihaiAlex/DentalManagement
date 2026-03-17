@@ -560,7 +560,7 @@ export const generateOrderExcel = (
         right: { style: 'thin', color: { rgb: "000000" } },
     };
 
-    const orangeFill = { fgColor: { rgb: "C65911" } };
+    const orangeFill = { fgColor: { rgb: "EBF1DE" } };
     const lightOrangeFill = { fgColor: { rgb: "F4B084" } };
     const paleOrangeFill = { fgColor: { rgb: "FCE4D6" } };
 
@@ -571,10 +571,10 @@ export const generateOrderExcel = (
         ws[ref].s = style;
     };
 
-    // Line 1 (Row 0): "Fișă de laborator" - #c65911
+    // Line 1 (Row 0): "Fișă de laborator" - #ebf1de
     for (let c = 0; c < 3; c++) {
         setStyle(0, c, {
-            font: { name: 'Calibri', sz: 14, bold: true, color: { rgb: "FFFFFF" } },
+            font: { name: 'Calibri', sz: 14, bold: true, color: { rgb: "000000" } },
             fill: orangeFill,
             alignment: { horizontal: 'center', vertical: 'center' },
             border: allBorders,
@@ -599,10 +599,10 @@ export const generateOrderExcel = (
         }
     }
 
-    // Line 4 (Row 3): "Produse" - #c65911
+    // Line 4 (Row 3): "Produse" - #ebf1de
     for (let c = 0; c < 3; c++) {
         setStyle(3, c, {
-            font: { name: 'Calibri', sz: 12, bold: true, color: { rgb: "FFFFFF" } },
+            font: { name: 'Calibri', sz: 12, bold: true, color: { rgb: "000000" } },
             fill: orangeFill,
             alignment: { horizontal: 'center', vertical: 'center' },
             border: allBorders,
@@ -635,10 +635,10 @@ export const generateOrderExcel = (
         });
     }
 
-    // Last line (Row lastRowIndex): "Total: {total}" - #c65911
+    // Last line (Row lastRowIndex): "Total: {total}" - #ebf1de
     for (let c = 0; c < 3; c++) {
         setStyle(lastRowIndex, c, {
-            font: { name: 'Calibri', sz: 12, bold: true, color: { rgb: "FFFFFF" } },
+            font: { name: 'Calibri', sz: 12, bold: true, color: { rgb: "000000" } },
             fill: orangeFill,
             alignment: { horizontal: 'center', vertical: 'center' },
             border: allBorders,
