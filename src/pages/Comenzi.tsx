@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Input } from '@/components/ui/Input';
 import { PlusCircle, Edit, Trash2, Search, Check, Play, Clock, FileDown, RefreshCcw, Banknote, HardHat, CalendarCheck, XCircle, Printer, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Comanda, OrderStatus } from '@/lib/types';
-import { formatDate, formatCurrency, exportAllComenziToZip, generateOrderWordDocument } from '@/lib/utils';
+import { formatDate, formatCurrency, exportAllComenziToZip, generateOrderExcel } from '@/lib/utils';
 import ConfirmDeleteModal from '@/components/modals/ConfirmDeleteModal';
 import ComandaModal from '@/components/modals/ComandaModal';
 import FinalizeazaComandaModal from '@/components/modals/FinalizeazaComandaModal';
@@ -173,12 +173,12 @@ const Comenzi: React.FC = () => {
         }
     };
 
-    const handlePrintOrder = async (comanda: Comanda) => {
+    const handlePrintOrder = (comanda: Comanda) => {
         try {
             const doctor = doctori.find(d => d.id === comanda.id_doctor);
             const pacient = doctor?.pacienti.find(p => p.id === comanda.id_pacient);
-            await generateOrderWordDocument(comanda, doctor, pacient, produse);
-            toast.success("Documentul a fost generat cu succes.");
+            generateOrderExcel(comanda, doctor, pacient, produse);
+            toast.success("Documentul Excel a fost generat cu succes.");
         } catch (error) {
             console.error("Print failed:", error);
             toast.error("Generarea documentului a eșuat.");

@@ -3,7 +3,6 @@ import { twMerge } from "tailwind-merge"
 import { format } from 'date-fns';
 import { ro } from 'date-fns/locale';
 import XLSX from 'xlsx-js-style';
-import { Document, Packer, Paragraph, TextRun, AlignmentType, HeadingLevel } from 'docx';
 import { saveAs } from 'file-saver';
 import JSZip from 'jszip';
 import { Comanda, Doctor, Produs, Pacient } from "./types";
@@ -469,81 +468,157 @@ export const exportAllComenziToZip = async (
     saveAs(zipBlob, `Export_Comenzi_${startFmt}_${endFmt}.zip`);
 };
 
-export const generateOrderWordDocument = async (
+export const generateOrderExcel = (
     comanda: Comanda,
     doctor: Doctor | undefined,
     pacient: Pacient | undefined,
     produse: Produs[]
 ) => {
-    const doc = new Document({
-        sections: [{
-            properties: {},
-            children: [
-                new Paragraph({
-                    text: 'Fisa Laborator',
-                    heading: HeadingLevel.HEADING_1,
-                    alignment: AlignmentType.CENTER,
-                    spacing: { after: 400 },
-                }),
-                new Paragraph({
-                    children: [
-                        new TextRun({
-                            text: 'Nume Doctor: ',
-                            bold: true,
-                        }),
-                        new TextRun({
-                            text: doctor?.nume || 'N/A',
-                        }),
-                    ],
-                    spacing: { after: 200 },
-                }),
-                new Paragraph({
-                    children: [
-                        new TextRun({
-                            text: 'Nume Pacient: ',
-                            bold: true,
-                        }),
-                        new TextRun({
-                            text: pacient?.nume || 'N/A',
-                        }),
-                    ],
-                    spacing: { after: 400 },
-                }),
-                new Paragraph({
-                    text: 'Produse:',
-                    heading: HeadingLevel.HEADING_2,
-                    spacing: { after: 200 },
-                }),
-                ...comanda.produse.map((comandaProdus) => {
-                    const produs = produse.find(p => p.id === comandaProdus.id_produs);
-                    return new Paragraph({
-                        text: `• ${produs?.nume || 'N/A'} (${comandaProdus.cantitate}x - ${formatCurrency((produs?.pret || 0) * comandaProdus.cantitate)})`,
-                        spacing: { after: 100 },
-                    });
-                }),
-                new Paragraph({
-                    text: '',
-                    spacing: { after: 200 },
-                }),
-                new Paragraph({
-                    children: [
-                        new TextRun({
-                            text: 'Total: ',
-                            bold: true,
-                            size: 28,
-                        }),
-                        new TextRun({
-                            text: formatCurrency(comanda.total),
-                            size: 28,
-                        }),
-                    ],
-                    spacing: { before: 200 },
-                }),
-            ],
-        }],
+    const sheetData: (string | number | null)[][] = [];
+    const merges: XLSX.Range[] = [];
+
+    // Row 0 (Line 1): "Fișă de laborator" - Merge A1:C1
+    sheetData.push(['Fișă de laborator', null, null]);
+    merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 2 } });
+
+    // Row 1 (Line 2): Doctor - Merge B2:C2
+    sheetData.push(['Nume Doctor:', doctor?.nume || 'N/A', null]);
+    merges.push({ s: { r: 1, c: 1 }, e: { r: 1, c: 2 } });
+
+    // Row 2 (Line 3): Patient - Merge B3:C3
+    sheetData.push(['Nume Pacient:', pacient?.nume || 'N/A', null]);
+    merges.push({ s: { r: 2, c: 1 }, e: { r: 2, c: 2 } });
+
+    // Row 3 (Line 4): "Produse" - Merge A4:C4
+    sheetData.push(['Produse', null, null]);
+    merges.push({ s: { r: 3, c: 0 }, e: { r: 3, c: 2 } });
+
+    // Starting from Row 4 (Line 5): Products
+    let grandTotal = 0;
+    comanda.produse.forEach(cp => {
+        const produs = produse.find(p => p.id === cp.id_produs);
+        const productTotal = (produs?.pret || 0) * cp.cantitate;
+        grandTotal += productTotal;
+        sheetData.push([
+            produs?.nume || 'N/A',
+            `${cp.cantitate} buc`,
+            productTotal,
+        ]);
     });
 
-    const blob = await Packer.toBlob(doc);
-    const filename = `Fisa_Laborator_${doctor?.nume.replace(/\s/g, '_')}_${pacient?.nume.replace(/\s/g, '_')}_${comanda.id}.docx`;
-    saveAs(blob, filename);
+    // Last line: "Total: {total general}" - Merge A:C
+    const lastRowIndex = sheetData.length;
+    sheetData.push([`Total: ${grandTotal.toFixed(2)}`, null, null]);
+    merges.push({ s: { r: lastRowIndex, c: 0 }, e: { r: lastRowIndex, c: 2 } });
+
+    // Create worksheet
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+    ws['!merges'] = merges;
+
+    // Column widths
+    ws['!cols'] = [
+        { wch: 30 },
+        { wch: 15 },
+        { wch: 15 },
+    ];
+
+    // --- STYLES ---
+    const allBorders = {
+        top: { style: 'thin', color: { rgb: "000000" } },
+        bottom: { style: 'thin', color: { rgb: "000000" } },
+        left: { style: 'thin', color: { rgb: "000000" } },
+        right: { style: 'thin', color: { rgb: "000000" } },
+    };
+
+    const orangeFill = { fgColor: { rgb: "C65911" } };
+    const lightOrangeFill = { fgColor: { rgb: "F4B084" } };
+    const paleOrangeFill = { fgColor: { rgb: "FCE4D6" } };
+
+    // Helper to ensure a cell exists and apply style
+    const setStyle = (r: number, c: number, style: any) => {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+        ws[ref].s = style;
+    };
+
+    // Line 1 (Row 0): "Fișă de laborator" - #c65911
+    for (let c = 0; c < 3; c++) {
+        setStyle(0, c, {
+            font: { name: 'Calibri', sz: 14, bold: true, color: { rgb: "FFFFFF" } },
+            fill: orangeFill,
+            alignment: { horizontal: 'center', vertical: 'center' },
+            border: allBorders,
+        });
+    }
+
+    // Lines 2 and 3 (Rows 1-2): Doctor and Patient - #fce4d6
+    for (let r = 1; r <= 2; r++) {
+        setStyle(r, 0, {
+            font: { name: 'Calibri', bold: true },
+            fill: paleOrangeFill,
+            alignment: { vertical: 'center' },
+            border: allBorders,
+        });
+        for (let c = 1; c <= 2; c++) {
+            setStyle(r, c, {
+                font: { name: 'Calibri' },
+                fill: paleOrangeFill,
+                alignment: { vertical: 'center' },
+                border: allBorders,
+            });
+        }
+    }
+
+    // Line 4 (Row 3): "Produse" - #c65911
+    for (let c = 0; c < 3; c++) {
+        setStyle(3, c, {
+            font: { name: 'Calibri', sz: 12, bold: true, color: { rgb: "FFFFFF" } },
+            fill: orangeFill,
+            alignment: { horizontal: 'center', vertical: 'center' },
+            border: allBorders,
+        });
+    }
+
+    // Product rows (Row 4 to lastRowIndex - 1)
+    for (let r = 4; r < lastRowIndex; r++) {
+        // Column A: product name - #fce4d6
+        setStyle(r, 0, {
+            font: { name: 'Calibri' },
+            fill: paleOrangeFill,
+            alignment: { vertical: 'center' },
+            border: allBorders,
+        });
+        // Column B: quantity - #fce4d6
+        setStyle(r, 1, {
+            font: { name: 'Calibri' },
+            fill: paleOrangeFill,
+            alignment: { horizontal: 'center', vertical: 'center' },
+            border: allBorders,
+        });
+        // Column C: total product - #f4b084
+        setStyle(r, 2, {
+            font: { name: 'Calibri' },
+            fill: lightOrangeFill,
+            alignment: { horizontal: 'center', vertical: 'center' },
+            border: allBorders,
+            numFmt: '0.00',
+        });
+    }
+
+    // Last line (Row lastRowIndex): "Total: {total}" - #c65911
+    for (let c = 0; c < 3; c++) {
+        setStyle(lastRowIndex, c, {
+            font: { name: 'Calibri', sz: 12, bold: true, color: { rgb: "FFFFFF" } },
+            fill: orangeFill,
+            alignment: { horizontal: 'center', vertical: 'center' },
+            border: allBorders,
+        });
+    }
+
+    // Create workbook and save
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Fisa de laborator');
+
+    const filename = `Fisa_Laborator_${doctor?.nume?.replace(/\s/g, '_') || 'N-A'}_${pacient?.nume?.replace(/\s/g, '_') || 'N-A'}_${comanda.id}.xlsx`;
+    XLSX.writeFile(wb, filename);
 };
