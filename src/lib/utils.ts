@@ -157,30 +157,52 @@ const buildDoctorWorkbook = (
 
     // --- STYLES ---
 
-    const grayBorder = {
-        top: { style: 'thin', color: { rgb: "808080" } },
-        bottom: { style: 'thin', color: { rgb: "808080" } },
-        left: { style: 'thin', color: { rgb: "808080" } },
-        right: { style: 'thin', color: { rgb: "808080" } },
+    const allBorders = {
+        top: { style: 'thin', color: { rgb: "000000" } },
+        bottom: { style: 'thin', color: { rgb: "000000" } },
+        left: { style: 'thin', color: { rgb: "000000" } },
+        right: { style: 'thin', color: { rgb: "000000" } },
     };
 
-    // Title: "Fisa Laborator" (A1)
+    // Title: "Fisa Laborator" (A1:D2 merged)
     const cellA1 = XLSX.utils.encode_cell({ r: 0, c: 0 });
     ws[cellA1].s = {
         font: { name: 'Calibri', sz: 16, bold: true },
         alignment: { horizontal: 'center', vertical: 'center' },
-        border: grayBorder,
+        border: allBorders,
     };
+    // Ensure all merged title cells (B1, C1, D1, A2-D2) get borders
+    for (let r = 0; r <= 1; r++) {
+        for (let c = 0; c < 4; c++) {
+            if (r === 0 && c === 0) continue; // already styled above
+            const ref = XLSX.utils.encode_cell({ r, c });
+            if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+            ws[ref].s = { border: allBorders };
+        }
+    }
 
-    // Doctor name (A3)
+    // Doctor name (A3:D3 merged)
     const cellA3 = XLSX.utils.encode_cell({ r: 2, c: 0 });
     if (ws[cellA3]) {
         ws[cellA3].s = {
             font: { name: 'Calibri', sz: 12, bold: true },
             fill: { fgColor: { rgb: "D3D3D3" } },
             alignment: { horizontal: 'center', vertical: 'center' },
-            border: grayBorder,
+            border: allBorders,
         };
+    }
+    // Ensure merged doctor name cells (B3, C3, D3) get borders
+    for (let c = 1; c < 4; c++) {
+        const ref = XLSX.utils.encode_cell({ r: 2, c });
+        if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+        ws[ref].s = { fill: { fgColor: { rgb: "D3D3D3" } }, border: allBorders };
+    }
+
+    // Empty row 3 (row index 3) - apply borders
+    for (let c = 0; c < 4; c++) {
+        const ref = XLSX.utils.encode_cell({ r: 3, c });
+        if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+        ws[ref].s = { border: allBorders };
     }
 
     // Header row (row 4)
@@ -191,7 +213,7 @@ const buildDoctorWorkbook = (
                 font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: "274E13" } },
                 fill: { fgColor: { rgb: "D9EAD3" } },
                 alignment: { horizontal: 'center', vertical: 'center' },
-                border: grayBorder,
+                border: allBorders,
             };
         }
     }
@@ -202,22 +224,30 @@ const buildDoctorWorkbook = (
     const dataCellStyleWhite = {
         fill: { fgColor: { rgb: "FFFFFF" } },
         alignment: { horizontal: 'center', vertical: 'center' },
-        border: grayBorder,
+        border: allBorders,
     };
     const dataCellStyleGreen = {
         fill: { fgColor: { rgb: "E8F5E9" } },
         alignment: { horizontal: 'center', vertical: 'center' },
         numFmt: '0.00',
-        border: grayBorder,
+        border: allBorders,
     };
 
     for (let r = 5; r < sheetData.length; r++) {
-        if (orderTotalRows.includes(r) || r === grandTotalRow || sheetData[r].every(v => v === null)) continue;
+        if (orderTotalRows.includes(r) || r === grandTotalRow) continue;
+        // For empty rows (separators), just apply borders
+        if (sheetData[r].every(v => v === null)) {
+            for (let c = 0; c < 4; c++) {
+                const cellRef = XLSX.utils.encode_cell({ r, c });
+                if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' };
+                ws[cellRef].s = { border: allBorders };
+            }
+            continue;
+        }
         for (let c = 0; c < 4; c++) {
             const cellRef = XLSX.utils.encode_cell({ r, c });
-            if (ws[cellRef]) {
-                ws[cellRef].s = c < 3 ? dataCellStyleWhite : dataCellStyleGreen;
-            }
+            if (!ws[cellRef]) ws[cellRef] = { t: 's', v: '' };
+            ws[cellRef].s = c < 3 ? dataCellStyleWhite : dataCellStyleGreen;
         }
     }
 
@@ -229,7 +259,7 @@ const buildDoctorWorkbook = (
                 font: { bold: true },
                 fill: { fgColor: { rgb: "FEF5E7" } },
                 alignment: { horizontal: 'center', vertical: 'center' },
-                border: grayBorder,
+                border: allBorders,
             };
         }
         // Ensure merged empty cells B and C also get background
@@ -238,7 +268,7 @@ const buildDoctorWorkbook = (
             if (!ws[ref]) ws[ref] = { t: 's', v: '' };
             ws[ref].s = {
                 fill: { fgColor: { rgb: "FEF5E7" } },
-                border: grayBorder,
+                border: allBorders,
             };
         }
         const valueRef = XLSX.utils.encode_cell({ r: row, c: 3 });
@@ -248,7 +278,7 @@ const buildDoctorWorkbook = (
                 font: { bold: true, color: { rgb: "0000FF" } },
                 alignment: { horizontal: 'center', vertical: 'center' },
                 numFmt: '0.00',
-                border: grayBorder,
+                border: allBorders,
             };
         }
     });
@@ -261,7 +291,7 @@ const buildDoctorWorkbook = (
             font: { bold: true },
             fill: { fgColor: { rgb: "FFF3CD" } },
             alignment: { horizontal: c === 0 ? 'left' : 'center', vertical: 'center' },
-            border: grayBorder,
+            border: allBorders,
             ...(c === 3 ? { numFmt: '0.00' } : {}),
         };
     }
