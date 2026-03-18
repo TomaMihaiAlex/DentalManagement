@@ -13,8 +13,10 @@
   NODE_VERSION = "18"
   CI = "true"       # Ensure we're in CI mode
   NETLIFY_BUILD_SKIP = "false"  # Never skip build
-  # Allow the scanner to ignore these VITE_* values which are intentionally
+  # Allow the scanner to ignore these values which are intentionally
   # embedded in the client bundle (Supabase anon key + public URL).
+  # Both VITE_* names (used in code) and their non-prefixed equivalents
+  # (set in Netlify env) must be listed so the scanner skips both.
   # These are public client-side values; do NOT put private keys here.
   SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_ANON_KEY,VITE_SUPABASE_URL"
   # Exclude documentation files with example credentials from secrets scanning
