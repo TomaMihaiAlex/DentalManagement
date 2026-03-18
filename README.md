@@ -2,19 +2,16 @@
 
 **Dental Lab Manager** este o aplicație web care facilitează gestionarea comenzilor într-un laborator dentar, construită în mare parte cu **TypeScript**.  
 
-> Proiect creat cu ajutorul AI pentru a accelera dezvoltarea, dar toate funcționalitățile sunt implementate manual.
-
 ## Funcționalități principale
 - **CRUD complet**: creează, citește, modifică și șterge comenzile și informațiile pacienților.  
-- **Export inteligent**: generează automat un fișier ZIP cu tabele Excel pentru fiecare medic în parte.  
+- **Export inteligent**: generează automat un fișier ZIP cu tabele Excel pentru fiecare medic în parte.
+- **Filtre pentru comenzi**: comenzile pot fi filtrate in functie de doctor, pacient sau tehnicianul care a lucrat.  
 
 ## Tehnologii folosite
-- **TypeScript 97%**, JavaScript 1%, altele 1%  
-- Frontend web modern  
-- Export Excel & ZIP automatizat  
-
+- TypeScript
+- JavaScript
+  
 ## Testează aplicația
-Poți încerca aplicația direct aici:
 [Dental Lab Manager](https://manager-laborator.netlify.app/)  
 
 ---
