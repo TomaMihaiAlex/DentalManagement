@@ -1,5 +1,10 @@
 # Dental Lab Manager 🦷💻
 
+##💡 **Scopul proiectului:**  
+Să simplifice procesul de gestionare a comenzilor în laboratoarele dentare, reducând timpul de lucru manual și facilitând accesul rapid la date pentru fiecare medic.
+
+---
+
 **Dental Lab Manager** este o aplicație web care facilitează gestionarea comenzilor într-un laborator dentar, construită în mare parte cu **TypeScript**.  
 
 ## Funcționalități principale
@@ -16,5 +21,3 @@
 
 ---
 
-💡 **Scopul proiectului:**  
-Să simplifice procesul de gestionare a comenzilor în laboratoarele dentare, reducând timpul de lucru manual și facilitând accesul rapid la date pentru fiecare medic.
