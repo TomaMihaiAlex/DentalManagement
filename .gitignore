@@ -8,3 +8,5 @@ dist/
 /.idea
 /.vscodenode_modules/
 .env
+# Local Netlify folder
+.netlify
