@@ -66,14 +66,32 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       try {
         console.debug('Loading data from Supabase...');
 
-        const [{ data: doctorRows, error: doctorErr } = {} as any, { data: pacientRows, error: pacientErr } = {} as any, { data: produsRows, error: produsErr } = {} as any, { data: tehnicianRows, error: tehnicianErr } = {} as any, { data: comenziRows, error: comenziErr } = {} as any, { data: cpRows, error: cpErr } = {} as any] = await Promise.all([
+        const [{ data: doctorRows, error: doctorErr } = {} as any, { data: pacientRows, error: pacientErr } = {} as any, { data: produsRows, error: produsErr } = {} as any, { data: tehnicianRows, error: tehnicianErr } = {} as any, { data: comenziRows, error: comenziErr } = {} as any] = await Promise.all([
           supabase!.from('doctori').select('*'),
           supabase!.from('pacienti').select('*'),
           supabase!.from('produse').select('*'),
           supabase!.from('tehnicieni').select('*'),
-          supabase!.from('comenzi').select('*'),
-          supabase!.from('comanda_produse').select('*'),
+          supabase!.from('comenzi').select('*').limit(10000),
         ]);
+
+        // Fetch ALL comanda_produse rows using pagination to avoid server row limits
+        let cpRows: any[] = [];
+        let cpErr: any = null;
+        {
+          const PAGE_SIZE = 1000;
+          let from = 0;
+          while (true) {
+            const { data: batch, error: batchErr } = await supabase!
+              .from('comanda_produse')
+              .select('*')
+              .range(from, from + PAGE_SIZE - 1);
+            if (batchErr) { cpErr = batchErr; break; }
+            if (batch) cpRows = cpRows.concat(batch);
+            if (!batch || batch.length < PAGE_SIZE) break;
+            from += PAGE_SIZE;
+          }
+          console.debug('[DataLoad] comanda_produse: fetched', cpRows.length, 'rows total');
+        }
 
         if (doctorErr || pacientErr || produsErr || tehnicianErr || comenziErr || cpErr) {
           console.error('Supabase load errors', { doctorErr, pacientErr, produsErr, tehnicianErr, comenziErr, cpErr });
@@ -124,6 +142,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
         // Keep all loaded comenzi as-is (do not mark or delete), even if related doctor/pacient rows are missing
         const filteredComenzi = (loadedComenzi || []);
+
+        // Diagnostic: log how many orders have products loaded
+        const withProducts = filteredComenzi.filter(c => c.produse.length > 0).length;
+        const withoutProducts = filteredComenzi.filter(c => c.produse.length === 0).length;
+        console.debug('[DataLoad] Comenzi:', filteredComenzi.length, '| Cu produse:', withProducts, '| Fără produse:', withoutProducts);
+        if (withoutProducts > 0) {
+          console.warn('[DataLoad] Comenzi fără produse:', filteredComenzi.filter(c => c.produse.length === 0).map(c => c.id));
+        }
 
         // update local state
   setProduse(loadedProduse.length ? loadedProduse.sort((a,b) => a.nume.localeCompare(b.nume, 'ro')) : MOCK_PRODUSE);
