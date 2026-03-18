@@ -2,13 +2,10 @@
     command = "npm install && npm run build"
   publish = "dist"
   base = "/"
-  ignore = "false"  # Never skip build
-  force = "true"    # Force build even if no changes detected
 
 [build.environment]
   NODE_VERSION = "18"
   CI = "true"       # Ensure we're in CI mode
-  NETLIFY_BUILD_SKIP = "false"  # Never skip build
   # Allow the scanner to ignore these VITE_* values which are intentionally
   # embedded in the client bundle (Supabase anon key + public URL).
   # These are public client-side values; do NOT put private keys here.
