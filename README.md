@@ -1,6 +1,6 @@
 # Dental Lab Manager 🦷💻
 
-##💡 **Scopul proiectului:**  
+💡 **Scopul proiectului:**  
 Să simplifice procesul de gestionare a comenzilor în laboratoarele dentare, reducând timpul de lucru manual și facilitând accesul rapid la date pentru fiecare medic.
 
 ---
