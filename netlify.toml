@@ -7,13 +7,14 @@
 
 [build.environment]
   NODE_VERSION = "18"
-  CI = "true"
-  NETLIFY_BUILD_SKIP = "false"
-  # Allow the scanner to ignore these keys whose values are intentionally
-  # embedded in the client bundle by Vite (public Supabase anon key + URL).
-  # SUPABASE_KEY and SUPABASE_URL hold the same values as their VITE_ counterparts
-  # and must also be omitted to avoid false-positive detections.
-  SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_ANON_KEY,VITE_SUPABASE_URL,SUPABASE_KEY,SUPABASE_URL"
+  CI = "true"       # Ensure we're in CI mode
+  NETLIFY_BUILD_SKIP = "false"  # Never skip build
+  # Allow the scanner to ignore these values which are intentionally
+  # embedded in the client bundle (Supabase anon key + public URL).
+  # Both VITE_* names (used in code) and their non-prefixed equivalents
+  # (set in Netlify env) must be listed so the scanner skips both.
+  # These are public client-side values; do NOT put private keys here.
+  SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_ANON_KEY,VITE_SUPABASE_URL,SUPABASE_URL,SUPABASE_KEY"
 
 [build.processing]
   skip_processing = false  # Ensure processing is not skipped
